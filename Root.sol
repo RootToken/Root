@@ -11,8 +11,8 @@ import "@openzeppelin/contracts-upgradeable-8/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable-8/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable-8/utils/math/MathUpgradeable.sol";
 
-import "./IBeanstalk.sol";
-import "./IDelegation.sol";
+import "../interfaces/IBeanstalk.sol";
+import "../interfaces/IDelegation.sol";
 
 /// @notice Silo deposit transfer
 /// @param token a whitelisted silo token address
@@ -396,14 +396,13 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
         // Default mode is EXTERNAL
         address burnAddress = msg.sender;
         // Transfer token from beanstalk internal to this contract and burn
-        if (mode != From.EXTERNAL) {
+        if (mode == From.INTERNAL) {
             burnAddress = address(this);
-            IBeanstalk(BEANSTALK_ADDRESS).transferTokenFrom(
+            IBeanstalk(BEANSTALK_ADDRESS).transferInternalTokenFrom(
                 this,
                 msg.sender,
                 burnAddress,
                 shares,
-                mode,
                 To.EXTERNAL
             );
         }
