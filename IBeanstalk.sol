@@ -62,12 +62,11 @@ interface IBeanstalk {
 
     function update(address account) external payable;
 
-    function transferTokenFrom(
+    function transferInternalTokenFrom(
         IERC20Upgradeable token,
         address from,
         address to,
         uint256 amount,
-        From fromMode,
         To toMode
     ) external payable;
 
