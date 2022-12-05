@@ -4,8 +4,8 @@
 
 A fungible wrapper for Beanstalk Silo Deposits: [roottoken.org](https://roottoken.org)
 
-Code Version: `1.0.0` <br>
-Whitepaper Version `1.0.1`
+Code Version: `1.0.1` <br>
+Whitepaper Version: `1.0.2`
 
 Root is an Ethereum-native permissionless wrapper that implements the ERC-20 token Standard to
 create fungibility and composability for Beanstalk Silo Deposits.
