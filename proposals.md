@@ -4,7 +4,7 @@ All past Root governance proposals can be found [here](https://github.com/RootTo
 
 ## Root Improvement Proposal (RIP)
 
-Root Improvement Proposals, or BIPs, are proposals to change Root.
+Root Improvement Proposals, or BIPs, are proposals to change the Root token or change Root governance.
 
 You can read more about BIPs [here](https://docs.roottoken.org/governance/proposals#rip).
 
