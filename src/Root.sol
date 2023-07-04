@@ -5,22 +5,22 @@
 pragma solidity ^0.8.17;
 pragma experimental ABIEncoderV2;
 
-import "@openzeppelin/contracts-upgradeable-8/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable-8/token/ERC20/IERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable-8/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable-8/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable-8/utils/math/MathUpgradeable.sol";
+import "lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
+import "lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
+import "lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "lib/openzeppelin-contracts-upgradeable/contracts/utils/math/MathUpgradeable.sol";
 
-import "./interfaces/IBeanstalk.sol";
-import "./interfaces/IDelegation.sol";
+import "./IBeanstalk.sol";
+import "./IDelegation.sol";
 
 /// @notice Silo deposit transfer
 /// @param token a whitelisted silo token address
-/// @param seasons a list of deposit season
+/// @param stems a list of deposit season
 /// @param amounts a list of deposit amount
 struct DepositTransfer {
     address token;
-    uint32[] seasons;
+    int96[] stems;
     uint256[] amounts;
 }
 
@@ -82,8 +82,9 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
 
     /// @notice The total bdv of the silo deposits in the contract
     /// @dev only get updated on mint/earn/redeem
-    /// @return underlyingBdv total bdv of the silo deposit(s) in the contract
-    uint256 public underlyingBdv;
+    /// @dev DEPRECATED with introduction of Silo V3
+    /// @return deprecatedUnderlyingBdv total bdv of the silo deposit(s) in the contract
+    uint256 public deprecatedUnderlyingBdv;
 
     /// @notice Nominated candidate to be the owner of the contract
     /// @dev The nominated candidate need to call the claimOwnership function
@@ -178,52 +179,51 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
 
     /// @notice Update bdv of a silo deposit and underlyingBdv
     /// @dev Will revert if bdv doesn't increase
-    function updateBdv(address token, uint32 season) external {
-        _updateBdv(token, season);
+    function updateBdv(address token, int96 stem) external {
+        _updateBdv(token, stem);
     }
 
     /// @notice Update Bdv of multiple silo deposits and underlyingBdv
     /// @dev Will revert if the bdv of the deposits doesn't increase
-    function updateBdvs(address[] calldata tokens, uint32[] calldata seasons)
+    function updateBdvs(address[] calldata tokens, int96[] calldata stems)
         external
     {
         for (uint256 i; i < tokens.length; ++i) {
-            _updateBdv(tokens[i], seasons[i]);
+            _updateBdv(tokens[i], stems[i]);
         }
     }
 
     /// @notice Update silo deposit bdv and underlyingBdv
     /// @dev Will revert if the BDV doesn't increase
-    function _updateBdv(address token, uint32 season) internal {
+    function _updateBdv(address token, int96 stem) internal {
         require(token != address(0), "Bdv: Non-zero token address required");
         (uint256 amount, ) = IBeanstalk(BEANSTALK_ADDRESS).getDeposit(
             address(this),
             token,
-            season
+            stem
         );
-        uint32[] memory seasons = new uint32[](1);
-        seasons[0] = season;
+        int96[] memory stems = new int96[](1);
+        stems[0] = stem;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
-        (, , , uint256 fromBdv, uint256 toBdv) = IBeanstalk(BEANSTALK_ADDRESS)
+        IBeanstalk(BEANSTALK_ADDRESS)
             .convert(
                 abi.encode(ConvertKind.LAMBDA_LAMBDA, amount, token),
-                seasons,
+                stems,
                 amounts
             );
-        underlyingBdv += toBdv - fromBdv;
     }
 
     /// @notice Return the ratio of underlyingBdv per ROOT token
     function bdvPerRoot() external view returns (uint256) {
+        (uint256 underlyingBdv, ) = getUnderlyingBdvAndBalanceOfSeeds();
         return (underlyingBdv * PRECISION) / totalSupply();
     }
 
     /// @notice Call plant function on Beanstalk
     /// @dev Anyone can call this function on behalf of the contract
     function earn() external {
-        uint256 beans = IBeanstalk(BEANSTALK_ADDRESS).plant();
-        underlyingBdv += beans;
+        IBeanstalk(BEANSTALK_ADDRESS).plant();
     }
 
     /// @dev return the min value of the three input values
@@ -462,9 +462,8 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
             uint256 seeds
         )
     {
-        IBeanstalk(BEANSTALK_ADDRESS).update(address(this));
-        uint256 balanceOfSeedsBefore = IBeanstalk(BEANSTALK_ADDRESS)
-            .balanceOfSeeds(address(this));
+        (uint256 underlyingBdvBefore, uint256 balanceOfSeedsBefore) = getUnderlyingBdvAndBalanceOfSeeds();
+
         uint256 balanceOfStalkBefore = IBeanstalk(BEANSTALK_ADDRESS)
             .balanceOfStalk(address(this));
 
@@ -480,23 +479,22 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
             );
             for (uint256 j; j < bdvs.length; ++j) {
                 bdv += bdvs[j];
+                seeds += bdvs[j] * IBeanstalk(BEANSTALK_ADDRESS).getSeedsPerToken(depositTransfers[i].token);
             }
         }
 
-        uint256 balanceOfSeedsAfter = IBeanstalk(BEANSTALK_ADDRESS)
-            .balanceOfSeeds(address(this));
         uint256 balanceOfStalkAfter = IBeanstalk(BEANSTALK_ADDRESS)
             .balanceOfStalk(address(this));
 
-        uint256 underlyingBdvAfter;
+        uint256 underlyingBdvAfter; uint256 balanceOfSeedsAfter;
         if (isDeposit) {
-            underlyingBdvAfter = underlyingBdv + bdv;
+            underlyingBdvAfter = underlyingBdvBefore + bdv;
             stalk = balanceOfStalkAfter - balanceOfStalkBefore;
-            seeds = balanceOfSeedsAfter - balanceOfSeedsBefore;
+            balanceOfSeedsAfter = balanceOfSeedsBefore + seeds;
         } else {
-            underlyingBdvAfter = underlyingBdv - bdv;
+            underlyingBdvAfter = underlyingBdvBefore - bdv;
             stalk = balanceOfStalkBefore - balanceOfStalkAfter;
-            seeds = balanceOfSeedsBefore - balanceOfSeedsAfter;
+            balanceOfSeedsAfter = balanceOfSeedsBefore - seeds;
         }
         uint256 supply = totalSupply();
         if (supply == 0) {
@@ -507,7 +505,7 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
                     _min(
                         underlyingBdvAfter.mulDiv(
                             PRECISION,
-                            underlyingBdv,
+                            underlyingBdvBefore,
                             MathUpgradeable.Rounding.Down
                         ),
                         balanceOfStalkAfter.mulDiv(
@@ -532,7 +530,7 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
                     _min(
                         underlyingBdvAfter.mulDiv(
                             PRECISION,
-                            underlyingBdv,
+                            underlyingBdvBefore,
                             MathUpgradeable.Rounding.Up
                         ),
                         balanceOfStalkAfter.mulDiv(
@@ -550,8 +548,6 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
                     MathUpgradeable.Rounding.Up
                 );
         }
-
-        underlyingBdv = underlyingBdvAfter;
     }
 
     /// @notice Transfer silo deposit(s) between contract/user
@@ -563,8 +559,12 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
             isDeposit ? msg.sender : address(this),
             isDeposit ? address(this) : msg.sender,
             depositTransfer.token,
-            depositTransfer.seasons,
+            depositTransfer.stems,
             depositTransfer.amounts
         );
+    }
+
+    function getUnderlyingBdvAndBalanceOfSeeds() internal view returns (uint256 underlyingBdv, uint256 balanceOfSeeds) {
+        // TODO impelement
     }
 }

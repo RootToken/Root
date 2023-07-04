@@ -2,7 +2,7 @@
 pragma solidity ^0.8.17;
 pragma experimental ABIEncoderV2;
 
-import "@openzeppelin/contracts-upgradeable-8/token/ERC20/IERC20Upgradeable.sol";
+import "lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 
 enum ConvertKind {
     BEANS_TO_CURVE_LP,
@@ -23,16 +23,22 @@ enum To {
     INTERNAL
 }
 
-interface IBeanstalk {
-    function balanceOfSeeds(address account) external view returns (uint256);
+struct SiloSettings {
+    bytes4 selector;
+    uint32 stalkEarnedPerSeason;
+    uint32 stalkIssuedPerBdv;
+    uint32 milestoneSeason;
+    int96 milestoneStem;
+}
 
+interface IBeanstalk {
     function balanceOfStalk(address account) external view returns (uint256);
 
     function transferDeposits(
         address sender,
         address recipient,
         address token,
-        uint32[] calldata seasons,
+        int96[] calldata stems,
         uint256[] calldata amounts
     ) external payable returns (uint256[] memory bdvs);
 
@@ -60,7 +66,7 @@ interface IBeanstalk {
 
     function plant() external payable returns (uint256);
 
-    function update(address account) external payable;
+    function mow(address account, address token) external payable;
 
     function transferInternalTokenFrom(
         IERC20Upgradeable token,
@@ -91,13 +97,24 @@ interface IBeanstalk {
 
     function convert(
         bytes calldata convertData,
-        uint32[] memory crates,
+        int96[] memory stems,
         uint256[] memory amounts
-    ) external payable returns (uint32 toSeason, uint256 fromAmount, uint256 toAmount, uint256 fromBdv, uint256 toBdv);
+    )
+        external
+        payable
+        returns (
+            int96 toStem,
+            uint256 fromAmount,
+            uint256 toAmount,
+            uint256 fromBdv,
+            uint256 toBdv
+        );
 
     function getDeposit(
         address account,
         address token,
-        uint32 season
+        int96 stem
     ) external view returns (uint256, uint256);
+
+    function getSeedsPerToken(address token) external view returns (uint256);
 }
