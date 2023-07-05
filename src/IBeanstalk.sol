@@ -110,6 +110,11 @@ interface IBeanstalk {
             uint256 toBdv
         );
 
+    function balanceOfDepositedBdv(address account, address token)
+        external
+        view
+        returns (uint256 depositedBdv);
+
     function getDeposit(
         address account,
         address token,

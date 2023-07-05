@@ -91,6 +91,8 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
     /// @return ownerCandidate The nomindated candidate to become the new owner of the contract
     address public ownerCandidate;
 
+    address[] whitelistedTokens;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -146,6 +148,7 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
     function addWhitelistToken(address token) external onlyOwner {
         require(token != address(0), "Non-zero token address required");
         whitelisted[token] = true;
+        whitelistedTokens.push(token);
         emit AddWhitelistToken(token);
     }
 
@@ -154,6 +157,13 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
     function removeWhitelistToken(address token) external onlyOwner {
         require(token != address(0), "Non-zero token address required");
         delete whitelisted[token];
+        for (uint256 i = 0; i < whitelistedTokens.length; i++) {
+            if (whitelistedTokens[i] == token) {
+                whitelistedTokens[i] = whitelistedTokens[whitelistedTokens.length - 1];
+                whitelistedTokens.pop();
+                break;
+            }
+        }
         emit RemoveWhitelistToken(token);
     }
 
@@ -565,6 +575,11 @@ contract Root is UUPSUpgradeable, ERC20PermitUpgradeable, OwnableUpgradeable {
     }
 
     function getUnderlyingBdvAndBalanceOfSeeds() internal view returns (uint256 underlyingBdv, uint256 balanceOfSeeds) {
-        // TODO impelement
+        uint256 tokenBdv;
+        for (uint256 i; i < whitelistedTokens.length; ++i) {
+            tokenBdv = IBeanstalk(BEANSTALK_ADDRESS).balanceOfDepositedBdv(address(this), whitelistedTokens[i]);
+            balanceOfSeeds += tokenBdv * IBeanstalk(BEANSTALK_ADDRESS).getSeedsPerToken(whitelistedTokens[i]);
+            underlyingBdv += tokenBdv;
+        }
     }
 }
